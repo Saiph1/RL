@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from custom_sim import LunarLander
 
 is_ipython = 'inline' in matplotlib.get_backend()
 if is_ipython:
@@ -32,21 +33,21 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-# Define the deep learning model used to estimate the policy function.
-class Policy_model(nn.Module):
-    def __init__(self, input_dim, output_dim, dropout = 0.5):
-        super().__init__()
+# Define the deep learning network used to estimate the Bellman equation.
+class DQN(nn.Module):
 
-        self.fc_1 = nn.Linear(input_dim, 128)
-        self.fc_2 = nn.Linear(128, output_dim)
-        self.dropout = nn.Dropout(dropout)
+    def __init__(self, n_observations, n_actions):
+        super(DQN, self).__init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions)
 
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        x = self.fc_1(x)
-        x = self.dropout(x)
-        x = F.relu(x)
-        x = self.fc_2(x)
-        return x
+        x = F.relu(self.layer1(x))
+        x = F.relu(self.layer2(x))
+        return self.layer3(x)
 
 def select_action(state):
     global steps_done
@@ -74,7 +75,8 @@ def plot_durations(show_result=False):
         plt.clf()
         plt.title('Training...')
     plt.xlabel('Episode')
-    plt.ylabel('Duration')
+    # plt.ylabel('Duration')
+    plt.ylabel('Reward')
     plt.plot(durations_t.numpy())
     # Take 100 episode averages and plot them too
     if len(durations_t) >= 100:
@@ -137,28 +139,22 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
 
-def init_weights(m):
-    if type(m) == nn.Linear:
-        torch.nn.init.xavier_normal_(m.weight)
-        m.bias.data.fill_(0)
 
 if __name__ == "__main__": 
 
-    env = gym.make("CartPole-v1")
+    env = LunarLander()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     Transition = namedtuple('Transition',
                             ('state', 'action', 'next_state', 'reward'))
 
     # Training related parameters: 
-    # BATCH_SIZE = 128
-    # GAMMA = 0.99
-    # EPS_START = 0.9
-    # EPS_END = 0.05
-    # EPS_DECAY = 1000
-    # TAU = 0.005
-    LR = 1e-2
-    DISCOUNT = 0.99
-    
+    BATCH_SIZE = 128
+    GAMMA = 0.99
+    EPS_START = 0.95
+    EPS_END = 0.05
+    EPS_DECAY = 1000
+    TAU = 0.005
+    LR = 1e-4
 
     # Get number of actions from gym action space
     n_actions = env.action_space.n
@@ -167,10 +163,9 @@ if __name__ == "__main__":
     n_observations = len(state)
 
     # target net = duplication for the policy net.  
-    policy_net = Policy_model(n_observations, n_actions).to(device)
-    policy_net.apply(init_weights)
-    # target_net = Policy_model(n_observations, n_actions).to(device)
-    # target_net.load_state_dict(policy_net.state_dict())
+    policy_net = DQN(n_observations, n_actions).to(device)
+    target_net = DQN(n_observations, n_actions).to(device)
+    target_net.load_state_dict(policy_net.state_dict())
 
     optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
     memory = ReplayMemory(10000)
@@ -179,9 +174,9 @@ if __name__ == "__main__":
     episode_durations = []
 
     if torch.cuda.is_available():
-        num_episodes = 600
+        num_episodes = 1000
     else:
-        num_episodes = 50
+        num_episodes = 20
 
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
@@ -190,6 +185,9 @@ if __name__ == "__main__":
         for t in count():
             action = select_action(state)
             observation, reward, terminated, truncated, _ = env.step(action.item())
+            # redefine reward so that it stays at middle region, -1 < x < 1
+            # if (reward > 0 and (observation[0]*observation[0])>1):
+            #      reward = 0
             reward = torch.tensor([reward], device=device)
             done = terminated or truncated
 
@@ -215,12 +213,17 @@ if __name__ == "__main__":
                 target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
             target_net.load_state_dict(target_net_state_dict)
 
-            if done:
-                episode_durations.append(t + 1)
+            if done or t > 700:
+                # episode_durations.append(t + 1)
+                episode_durations.append(reward)
                 plot_durations()
                 break
 
+    name = "minimize_loss_withguide_y100view10000dis10000_andgledevpenalty20000_velocitypenalty1000_endRefine_reward_15_deep_q_policy_net_custom_1000.pth"
+    torch.save(policy_net.state_dict(), name)
+    # torch.save(target_net.state_dict(), 'deep_q_target_net_custom_500.pth')
     print('Complete')
     plot_durations(show_result=True)
     plt.ioff()
     plt.show()
+    plt.savefig(name)
