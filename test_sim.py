@@ -18,16 +18,18 @@ n_observations = len(state)
 observation, info = env.reset()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = DQN(n_observations, n_actions).to(device)
-model.load_state_dict(torch.load("minimize_loss_withguide_y100view10000dis10000_andgledevpenalty20000_velocitypenalty1000_endRefine_reward_15_deep_q_policy_net_custom_1000.pth"))
+# model.load_state_dict(torch.load("minimize_loss_withguide_y100view10000dis2000_andgledevpenalty10000_velocitypenalty1000_endRefine_reward_17_deep_q_policy_net_custom_10000.pth"))
+# model.load_state_dict(torch.load("final.pth"))
+model.load_state_dict(torch.load("test.pth"))
 model.eval()
 
-for _ in range(1000):
+for _ in range(100000):
     # action = env.action_space.sample()  
     ob = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
     with torch.no_grad():
         action = model(ob).max(1)[1].view(1, 1)
     observation, reward, terminated, truncated, info = env.step(action.item())
-    # print("Rewards = ", reward)
+    print("Rewards = ", reward)
     # print("Observation =", observation[2])
     # print("ob2", observation[3])
     if terminated or truncated:
