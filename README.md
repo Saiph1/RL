@@ -5,7 +5,7 @@ A practice personal project on deep Q learning.
 
 ## ⛏️ Environment <a name = "Environment"></a>
 
-- [OpenAI Gymnasium] (https://gymnasium.farama.org/) Simulation environment. 
+- [OpenAI Gymnasium](https://gymnasium.farama.org/) for Simulation environment. 
 
 ## ⛏️ Self Note / DO-List <a name = "Self note/ DO-LIST"></a>
 - Reward functions
